@@ -1,0 +1,41 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ "**" ] # Runs on every push to any branch
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  validate-and-build:
+    name: Validate and Build Docker
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm'
+        cache-dependency-path: backend/package-lock.json
+
+    - name: Install Backend Dependencies
+      working-directory: ./backend
+      run: npm ci
+
+    - name: Build Backend (TypeScript)
+      working-directory: ./backend
+      run: npm run build
+
+    - name: Build Docker Image
+      working-directory: ./backend
+      run: docker build -t convertfast-backend:latest .
+
+    - name: Production Deployment Simulation
+      if: github.ref == 'refs/heads/main'
+      run: |
+        echo "This step would deploy to production (Railway/Render/AWS) because we are on main branch."
+        # Add your deployment commands here when ready

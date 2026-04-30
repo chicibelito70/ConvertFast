@@ -6,108 +6,125 @@ import ffmpeg from 'fluent-ffmpeg';
 import sharp from 'sharp';
 import { exec } from 'child_process';
 import { promisify } from 'util';
+import { descargarDesdeR2, subirArchivo } from '../services/storage.service';
 
-const execPromise = promisify(exec);
+const ejecutarComando = promisify(exec);
 
-const connection = new IORedis({
+const conexionRedis = new IORedis({
   host: process.env.REDIS_HOST || 'localhost',
   port: parseInt(process.env.REDIS_PORT || '6379'),
   maxRetriesPerRequest: null,
 });
 
-const uploadDir = path.join(__dirname, '../../uploads');
-const outputDir = path.join(__dirname, '../../outputs');
+const carpetaSubidas = path.join(__dirname, '../../uploads');
+const carpetaSalidas = path.join(__dirname, '../../outputs');
 
-if (!fs.existsSync(outputDir)) {
-  fs.mkdirSync(outputDir, { recursive: true });
-}
+if (!fs.existsSync(carpetaSubidas)) fs.mkdirSync(carpetaSubidas, { recursive: true });
+if (!fs.existsSync(carpetaSalidas)) fs.mkdirSync(carpetaSalidas, { recursive: true });
 
-const worker = new Worker('conversion-queue', async (job: Job) => {
-  const { fileId, targetFormat, jobId } = job.data;
-  const inputPath = path.join(uploadDir, fileId);
-  const outputFileName = `${jobId}.${targetFormat}`;
-  const outputPath = path.join(outputDir, outputFileName);
-
-  console.log(`Starting conversion: ${fileId} -> ${targetFormat}`);
-
-  const ext = path.extname(fileId).toLowerCase().replace('.', '');
+const procesador = new Worker('conversion-queue', async (tarea: Job) => {
+  const { fileId, targetFormat, jobId } = tarea.data;
   
-  try {
-    // 1. IMAGE CONVERSIONS (Sharp)
-    if (['jpg', 'jpeg', 'png', 'webp', 'svg'].includes(targetFormat) && ['jpg', 'jpeg', 'png', 'webp'].includes(ext)) {
-      await sharp(inputPath).toFile(outputPath);
-      return outputFileName;
-    }
+  const rutaEntrada = path.join(carpetaSubidas, fileId);
+  const nombreArchivoSalida = `${jobId}.${targetFormat}`;
+  const rutaSalida = path.join(carpetaSalidas, nombreArchivoSalida);
 
-    // 2. AUDIO/VIDEO CONVERSIONS (FFmpeg)
-    if (['mp3', 'wav', 'ogg', 'mp4', 'avi', 'mov', 'webm'].includes(targetFormat)) {
-      return new Promise((resolve, reject) => {
-        ffmpeg(inputPath)
+  console.log(`Iniciando conversión: ${fileId} -> ${targetFormat}`);
+
+  try {
+    console.log(`Descargando ${fileId} desde R2...`);
+    await descargarDesdeR2(fileId, rutaEntrada);
+
+    const extension = path.extname(fileId).toLowerCase().replace('.', '');
+    
+    // 1. IMÁGENES
+    if (['jpg', 'jpeg', 'png', 'webp', 'svg'].includes(targetFormat) && ['jpg', 'jpeg', 'png', 'webp', 'svg'].includes(extension)) {
+      await sharp(rutaEntrada).toFile(rutaSalida);
+    }
+    // 2. AUDIO/VIDEO
+    else if (['mp3', 'wav', 'ogg', 'mp4', 'avi', 'mov', 'webm'].includes(targetFormat)) {
+      await new Promise((resolve, reject) => {
+        ffmpeg(rutaEntrada)
           .toFormat(targetFormat)
-          .on('progress', (progress) => {
-            job.updateProgress(progress.percent || 0);
-          })
-          .on('end', () => resolve(outputFileName))
+          .on('end', () => resolve(nombreArchivoSalida))
           .on('error', (err) => reject(err))
-          .save(outputPath);
+          .save(rutaSalida);
       });
     }
-
-    // 3. DOCUMENT CONVERSIONS (LibreOffice)
-    // Requires libreoffice installed on the system
-    if (['pdf', 'docx', 'txt', 'xlsx', 'csv', 'pptx'].includes(targetFormat)) {
-       // Check if we should use 'soffice' (Windows) or 'libreoffice' (Linux/Docker)
-       let libreOfficeCmd = 'libreoffice';
-       try {
-         await execPromise('libreoffice --version');
-       } catch (e) {
-         libreOfficeCmd = 'soffice';
-       }
-
-       const command = `${libreOfficeCmd} --headless --convert-to ${targetFormat} "${inputPath}" --outdir "${outputDir}"`;
-       await execPromise(command);
+    // 3. CASOS ESPECIALES (PDF y DOCUMENTOS)
+    else if (extension === 'pdf' && targetFormat === 'docx') {
+       console.log('Usando pdf2docx...');
+       await ejecutarComando(`python3 -c "from pdf2docx import Converter; cv = Converter('${rutaEntrada}'); cv.convert('${rutaSalida}'); cv.close()"`);
+    }
+    else if (extension === 'pdf' && targetFormat === 'txt') {
+       console.log('Usando pdftotext...');
+       await ejecutarComando(`pdftotext "${rutaEntrada}" "${rutaSalida}"`);
+    }
+    else if (extension === 'pdf' && targetFormat === 'epub') {
+       console.log('Conversión compleja: PDF -> EPUB (vía DOCX temporal)...');
+       const rutaTemporalDocx = path.join(carpetaSalidas, `${jobId}_temp.docx`);
        
-       // LibreOffice keeps the original filename but changes extension
-       const originalBase = path.basename(fileId, path.extname(fileId));
-       const libreOfficeOutput = path.join(outputDir, `${originalBase}.${targetFormat}`);
+       // Paso A: PDF a Word temporal
+       await ejecutarComando(`python3 -c "from pdf2docx import Converter; cv = Converter('${rutaEntrada}'); cv.convert('${rutaTemporalDocx}'); cv.close()"`);
        
-       if (fs.existsSync(libreOfficeOutput)) {
-         fs.renameSync(libreOfficeOutput, outputPath);
-         return outputFileName;
+       // Paso B: Word temporal a EPUB
+       await ejecutarComando(`pandoc "${rutaTemporalDocx}" -o "${rutaSalida}"`);
+       
+       // Limpieza del archivo temporal
+       if (fs.existsSync(rutaTemporalDocx)) fs.unlinkSync(rutaTemporalDocx);
+    }
+    else if (targetFormat === 'epub') {
+       console.log('Usando Pandoc para EPUB...');
+       await ejecutarComando(`pandoc "${rutaEntrada}" -o "${rutaSalida}"`);
+    }
+    // 4. DOCUMENTOS GENERALES (LibreOffice)
+    else if (['pdf', 'docx', 'txt', 'xlsx', 'csv', 'pptx'].includes(targetFormat)) {
+       let comandoLibreOffice = 'libreoffice';
+       try { await ejecutarComando('libreoffice --version'); } catch (e) { comandoLibreOffice = 'soffice'; }
+
+       const comando = `${comandoLibreOffice} --headless --convert-to ${targetFormat} "${rutaEntrada}" --outdir "${carpetaSalidas}"`;
+       console.log(`Ejecutando LibreOffice: ${comando}`);
+       await ejecutarComando(comando);
+       
+       const baseOriginal = path.basename(fileId, path.extname(fileId));
+       const salidaLibreOffice = path.join(carpetaSalidas, `${baseOriginal}.${targetFormat}`);
+       
+       if (fs.existsSync(salidaLibreOffice)) {
+         fs.renameSync(salidaLibreOffice, rutaSalida);
        } else {
-         throw new Error('LibreOffice conversion failed to produce file');
+         throw new Error('La conversión de documentos falló');
        }
     }
-
-    // 4. ARCHIVE CONVERSIONS (7-Zip)
-    if (['zip', '7z'].includes(targetFormat)) {
-      if (ext === 'zip' && targetFormat === '7z') {
-        await execPromise(`7z a "${outputPath}" "${inputPath}"`);
-      } else if (ext === '7z' && targetFormat === 'zip') {
-        // Extract 7z then zip
-        const tempExtractDir = path.join(uploadDir, `extract_${jobId}`);
-        fs.mkdirSync(tempExtractDir, { recursive: true });
-        await execPromise(`7z x "${inputPath}" -o"${tempExtractDir}"`);
-        await execPromise(`7z a -tzip "${outputPath}" "${tempExtractDir}/*"`);
-        // Cleanup temp
-        fs.rmSync(tempExtractDir, { recursive: true, force: true });
+    // 5. ARCHIVOS COMPRIMIDOS
+    else if (['zip', '7z'].includes(targetFormat)) {
+      if (extension === 'zip' && targetFormat === '7z') {
+        await ejecutarComando(`7z a "${rutaSalida}" "${rutaEntrada}"`);
+      } else if (extension === '7z' && targetFormat === 'zip') {
+        const carpetaTemp = path.join(carpetaSubidas, `extract_${jobId}`);
+        fs.mkdirSync(carpetaTemp, { recursive: true });
+        await ejecutarComando(`7z x "${rutaEntrada}" -o"${carpetaTemp}"`);
+        await ejecutarComando(`7z a -tzip "${rutaSalida}" "${carpetaTemp}/*"`);
+        fs.rmSync(carpetaTemp, { recursive: true, force: true });
       }
-      return outputFileName;
+    } else {
+        throw new Error(`Conversión no soportada: ${extension} a ${targetFormat}`);
     }
 
-    throw new Error(`Unsupported conversion: ${ext} to ${targetFormat}`);
+    console.log(`Subiendo resultado ${nombreArchivoSalida} a R2...`);
+    await subirArchivo(rutaSalida, nombreArchivoSalida);
+
+    return nombreArchivoSalida;
+
   } catch (error: any) {
-    console.error('Conversion error:', error);
+    console.error('Error en la conversión:', error);
     throw error;
+  } finally {
+    if (fs.existsSync(rutaEntrada)) fs.unlinkSync(rutaEntrada);
+    if (fs.existsSync(rutaSalida)) fs.unlinkSync(rutaSalida);
   }
-}, { connection });
+}, { connection: conexionRedis });
 
-worker.on('completed', (job) => {
-  console.log(`Job ${job.id} completed successfully`);
-});
+procesador.on('completed', (tarea) => console.log(`Tarea ${tarea.id} completada`));
+procesador.on('failed', (tarea, err) => console.error(`Tarea ${tarea?.id} falló: ${err.message}`));
 
-worker.on('failed', (job, err) => {
-  console.error(`Job ${job?.id} failed with error: ${err.message}`);
-});
-
-console.log('Conversion worker is running...');
+console.log('Worker listo con soporte inteligente de formatos...');

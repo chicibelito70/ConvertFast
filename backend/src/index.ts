@@ -2,29 +2,31 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import path from 'path';
-import uploadRoutes from './routes/uploadRoutes';
-import conversionRoutes from './routes/conversionRoutes';
+import rutasSubida from './routes/uploadRoutes';
+import rutasConversion from './routes/conversionRoutes';
 import './workers/conversion.worker';
 
+// Cargar variables de entorno
 dotenv.config();
 
 const app = express();
-const PORT = process.env.PORT || 4000;
+const PUERTO = process.env.PORT || 4000;
 
 app.use(cors());
 app.use(express.json());
 
-// Static folders for downloads
-app.use('/downloads', express.static(path.join(__dirname, 'outputs')));
+// Carpetas estáticas para descargas (opcional si se usa R2)
+app.use('/descargas', express.static(path.join(__dirname, 'outputs')));
 
-// Routes
-app.use('/api/upload', uploadRoutes);
-app.use('/api/convert', conversionRoutes);
+// Rutas
+app.use('/api/upload', rutasSubida);
+app.use('/api/convert', rutasConversion);
 
-app.get('/health', (req, res) => {
-  res.status(200).json({ status: 'ok', message: 'ConvertFast API is running' });
+// Verificación de estado del servidor
+app.get('/salud', (req, res) => {
+  res.status(200).json({ estado: 'ok', mensaje: 'La API de ConvertFast está funcionando' });
 });
 
-app.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
+app.listen(PUERTO, () => {
+  console.log(`El servidor está corriendo en el puerto ${PUERTO}`);
 });
