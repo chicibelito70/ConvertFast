@@ -4,7 +4,7 @@ on:
   push:
     branches: [ "**" ] # Runs on every push to any branch
   pull_request:
-    branches: [ "main" ]
+    branches: [ "master" ]
 
 jobs:
   validate-and-build:

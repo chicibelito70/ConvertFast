@@ -1,24 +1,59 @@
 "use client"
 
+import { useEffect, useRef } from "react"
 import { motion } from "framer-motion"
 import { ExternalLink } from "lucide-react"
 
 interface AdSpaceProps {
   type: "banner" | "sidebar" | "native"
   className?: string
+  adSlot?: string // El ID del bloque de anuncios que te da Google
 }
 
-export default function AdSpace({ type, className }: AdSpaceProps) {
+export default function AdSpace({ type, className, adSlot }: AdSpaceProps) {
+  const adSenseId = process.env.NEXT_PUBLIC_ADSENSE_ID;
+  const mostrarAnuncioReal = Boolean(adSenseId && adSlot);
+  const inicializado = useRef(false);
+
+  useEffect(() => {
+    // Si tenemos el ID de Google, inicializamos el anuncio real
+    if (mostrarAnuncioReal && !inicializado.current) {
+      try {
+        // @ts-ignore
+        (window.adsbygoogle = window.adsbygoogle || []).push({});
+        inicializado.current = true;
+      } catch (err) {
+        console.error("Error cargando AdSense:", err);
+      }
+    }
+  }, [mostrarAnuncioReal]);
+
+  if (mostrarAnuncioReal) {
+    return (
+      <div className={`overflow-hidden rounded-xl bg-background/50 flex justify-center items-center ${className}`}>
+        {/* Etiqueta oficial de Google AdSense */}
+        <ins
+          className="adsbygoogle"
+          style={{ display: "block", width: "100%", height: "100%" }}
+          data-ad-client={adSenseId}
+          data-ad-slot={adSlot}
+          data-ad-format={type === "sidebar" ? "vertical" : "auto"}
+          data-full-width-responsive="true"
+        />
+      </div>
+    );
+  }
+
+  // Fallback: Si no hay cuenta de Google configurada, mostramos los placeholders para conseguir anunciantes
   return (
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       className={`bg-muted/20 border border-dashed border-muted-foreground/20 rounded-xl flex items-center justify-center overflow-hidden relative group ${className}`}
     >
-      {/* Botón de "Publicítate aquí" */}
       <a 
-        href="mailto:anuncios@convertfast.com" 
-        className="absolute top-2 right-2 flex items-center gap-1 text-[10px] font-bold bg-background/80 backdrop-blur-sm px-2 py-1 rounded-full border opacity-0 group-hover:opacity-100 transition-opacity hover:bg-primary hover:text-primary-foreground"
+        href="mailto:contacto@tu-dominio.com" 
+        className="absolute top-2 right-2 flex items-center gap-1 text-[10px] font-bold bg-background/80 backdrop-blur-sm px-2 py-1 rounded-full border opacity-0 group-hover:opacity-100 transition-opacity hover:bg-primary hover:text-primary-foreground z-10"
       >
         ¿Tu anuncio aquí? <ExternalLink className="h-2 w-2" />
       </a>
