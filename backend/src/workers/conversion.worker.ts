@@ -10,11 +10,13 @@ import { descargarDesdeR2, subirArchivo } from '../services/storage.service';
 
 const ejecutarComando = promisify(exec);
 
-const conexionRedis = new IORedis({
-  host: process.env.REDIS_HOST || 'localhost',
-  port: parseInt(process.env.REDIS_PORT || '6379'),
-  maxRetriesPerRequest: null,
-});
+const conexionRedis = process.env.REDIS_URL 
+  ? new IORedis(process.env.REDIS_URL, { maxRetriesPerRequest: null })
+  : new IORedis({
+      host: process.env.REDIS_HOST || 'localhost',
+      port: parseInt(process.env.REDIS_PORT || '6379'),
+      maxRetriesPerRequest: null,
+    });
 
 const carpetaSubidas = path.join(__dirname, '../../uploads');
 const carpetaSalidas = path.join(__dirname, '../../outputs');
