@@ -13,6 +13,9 @@ export const metadata: Metadata = {
   title: "ConvertFast | Conversor de Archivos Online Gratis y Rápido",
   description: "Convierte PDF, DOCX, JPG, MP4 y más en segundos. Herramienta gratuita, segura y profesional sin registros.",
   keywords: "convertir archivos, pdf a word, jpg a png, mp4 a mp3, conversor online gratis",
+  other: {
+    "google-adsense-account": "ca-pub-2752094170492700"
+  }
 };
 
 export default function RootLayout({
