@@ -123,11 +123,19 @@ export default function Convertidor() {
         <div className="p-8">
           <AnimatePresence mode="wait">
             {estado === "INACTIVO" && !archivo && (
-              <motion.div key="drop" initial={{ opacity: 0 }} animate={{ opacity: 1 }} {...getRootProps()} className={cn("border-2 border-dashed rounded-2xl p-12 text-center cursor-pointer", isDragActive ? "border-primary bg-primary/5" : "border-muted-foreground/20")}>
-                <input {...getInputProps()} />
-                <div className="flex flex-col items-center gap-4">
-                  <div className="p-4 bg-primary/10 rounded-full"><Upload className="h-10 w-10 text-primary" /></div>
-                  <p className="text-xl font-semibold">Arrastra archivos aquí</p>
+              <motion.div key="drop" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+                <div 
+                  {...getRootProps()} 
+                  className={cn(
+                    "border-2 border-dashed rounded-2xl p-12 text-center cursor-pointer", 
+                    isDragActive ? "border-primary bg-primary/5" : "border-muted-foreground/20"
+                  )}
+                >
+                  <input {...getInputProps()} />
+                  <div className="flex flex-col items-center gap-4">
+                    <div className="p-4 bg-primary/10 rounded-full"><Upload className="h-10 w-10 text-primary" /></div>
+                    <p className="text-xl font-semibold">Arrastra archivos aquí</p>
+                  </div>
                 </div>
               </motion.div>
             )}

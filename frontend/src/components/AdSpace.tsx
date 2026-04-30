@@ -1,6 +1,7 @@
 "use client"
 
 import { motion } from "framer-motion"
+import { ExternalLink } from "lucide-react"
 
 interface AdSpaceProps {
   type: "banner" | "sidebar" | "native"
@@ -12,8 +13,16 @@ export default function AdSpace({ type, className }: AdSpaceProps) {
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
-      className={`bg-muted/20 border border-dashed border-muted-foreground/20 rounded-xl flex items-center justify-center overflow-hidden ${className}`}
+      className={`bg-muted/20 border border-dashed border-muted-foreground/20 rounded-xl flex items-center justify-center overflow-hidden relative group ${className}`}
     >
+      {/* Botón de "Publicítate aquí" */}
+      <a 
+        href="mailto:anuncios@convertfast.com" 
+        className="absolute top-2 right-2 flex items-center gap-1 text-[10px] font-bold bg-background/80 backdrop-blur-sm px-2 py-1 rounded-full border opacity-0 group-hover:opacity-100 transition-opacity hover:bg-primary hover:text-primary-foreground"
+      >
+        ¿Tu anuncio aquí? <ExternalLink className="h-2 w-2" />
+      </a>
+
       {type === "banner" && (
         <div className="w-full h-full min-h-[90px] flex flex-col items-center justify-center text-muted-foreground">
           <span className="text-[10px] uppercase tracking-widest mb-1 opacity-50">Publicidad</span>
@@ -27,21 +36,17 @@ export default function AdSpace({ type, className }: AdSpaceProps) {
         <div className="w-full h-full min-h-[600px] flex flex-col items-center justify-center text-muted-foreground p-4 text-center">
           <span className="text-[10px] uppercase tracking-widest mb-2 opacity-50">Publicidad</span>
           <div className="w-[300px] h-[600px] bg-muted/30 flex items-center justify-center italic text-sm">
-            Sidebar Banner (300x600)
+            Banner Lateral (300x600)
           </div>
         </div>
       )}
 
       {type === "native" && (
-        <div className="w-full p-6 flex flex-col gap-3">
-          <span className="text-[10px] uppercase tracking-widest opacity-50">Contenido Patrocinado</span>
-          <div className="flex gap-4">
-            <div className="w-24 h-24 bg-muted/30 rounded-lg shrink-0" />
-            <div className="flex-grow space-y-2">
-              <div className="h-4 w-3/4 bg-muted/30 rounded" />
-              <div className="h-4 w-full bg-muted/30 rounded" />
-              <div className="h-4 w-1/2 bg-muted/30 rounded" />
-            </div>
+        <div className="w-full p-4 flex items-center gap-4 text-muted-foreground">
+          <div className="w-12 h-12 bg-muted/30 rounded-lg flex items-center justify-center italic text-[10px]">Icono</div>
+          <div className="flex-grow">
+            <div className="h-4 w-24 bg-muted/30 rounded mb-2" />
+            <div className="h-3 w-full bg-muted/30 rounded" />
           </div>
         </div>
       )}
