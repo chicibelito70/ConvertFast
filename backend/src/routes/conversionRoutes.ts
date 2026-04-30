@@ -30,6 +30,15 @@ router.post('/', async (req, res) => {
     return res.status(400).json({ error: 'Faltan datos requeridos (fileId, targetFormat)' });
   }
 
+  // AUDITORÍA DE SEGURIDAD: Validar estrictamente los parámetros para evitar inyección de comandos o path traversal
+  if (!/^[a-f0-9\-]+\.[a-z0-9]+$/i.test(fileId)) {
+    return res.status(400).json({ error: 'El fileId proporcionado es inválido o peligroso.' });
+  }
+
+  if (!/^[a-z0-9]+$/i.test(targetFormat)) {
+    return res.status(400).json({ error: 'El formato destino es inválido o peligroso.' });
+  }
+
   const idTarea = uuidv4();
 
   try {

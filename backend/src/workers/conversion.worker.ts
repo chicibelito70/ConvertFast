@@ -90,9 +90,14 @@ const procesador = new Worker('conversion-queue', async (tarea: Job) => {
        let comandoLibreOffice = 'libreoffice';
        try { await ejecutarComando('libreoffice --version'); } catch (e) { comandoLibreOffice = 'soffice'; }
 
-       const comando = `${comandoLibreOffice} --headless --convert-to ${targetFormat} "${rutaEntrada}" --outdir "${carpetaSalidas}"`;
+       // AUDITORÍA: LibreOffice falla al ejecutarse como root en Docker. 
+       // Solución: Aislar el perfil de usuario por cada tarea usando -env:UserInstallation
+       const perfilTemp = `file:///tmp/LibreOffice_${jobId}`;
+       const comando = `${comandoLibreOffice} -env:UserInstallation=${perfilTemp} --headless --convert-to ${targetFormat} "${rutaEntrada}" --outdir "${carpetaSalidas}"`;
+       
        console.log(`Ejecutando LibreOffice: ${comando}`);
-       await ejecutarComando(comando);
+       // Tiempo límite de 5 minutos (300000 ms) para evitar que se quede colgado
+       await ejecutarComando(comando, { timeout: 300000 });
        
        const baseOriginal = path.basename(fileId, path.extname(fileId));
        const salidaLibreOffice = path.join(carpetaSalidas, `${baseOriginal}.${targetFormat}`);
@@ -100,8 +105,11 @@ const procesador = new Worker('conversion-queue', async (tarea: Job) => {
        if (fs.existsSync(salidaLibreOffice)) {
          fs.renameSync(salidaLibreOffice, rutaSalida);
        } else {
-         throw new Error('La conversión de documentos falló');
+         throw new Error('La conversión de documentos falló (LibreOffice no generó salida)');
        }
+       
+       // Limpiar el perfil temporal
+       try { await ejecutarComando(`rm -rf /tmp/LibreOffice_${jobId}`); } catch(e) {}
     }
     // 5. ARCHIVOS COMPRIMIDOS
     else if (['zip', '7z'].includes(targetFormat)) {
