@@ -6,11 +6,13 @@ import { obtenerUrlDescarga } from '../services/storage.service';
 
 const router = Router();
 
-const conexionRedis = new IORedis({
-  host: process.env.REDIS_HOST || 'localhost',
-  port: parseInt(process.env.REDIS_PORT || '6379'),
-  maxRetriesPerRequest: null,
-});
+const conexionRedis = process.env.REDIS_URL 
+  ? new IORedis(process.env.REDIS_URL, { maxRetriesPerRequest: null })
+  : new IORedis({
+      host: process.env.REDIS_HOST || 'localhost',
+      port: parseInt(process.env.REDIS_PORT || '6379'),
+      maxRetriesPerRequest: null,
+    });
 
 const colaConversion = new Queue('conversion-queue', { connection: conexionRedis });
 

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Inter, Outfit } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider";
+import Script from "next/script";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 
@@ -19,9 +20,19 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const adSenseId = process.env.NEXT_PUBLIC_ADSENSE_ID;
+
   return (
     <html lang="es" suppressHydrationWarning>
       <body className={`${inter.variable} ${outfit.variable} font-sans antialiased bg-background text-foreground`}>
+        {adSenseId && (
+          <Script
+            async
+            src={`https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${adSenseId}`}
+            crossOrigin="anonymous"
+            strategy="lazyOnload"
+          />
+        )}
         <ThemeProvider attribute="class" defaultTheme="dark" enableSystem>
           <div className="relative min-h-screen flex flex-col">
             <Navbar />
