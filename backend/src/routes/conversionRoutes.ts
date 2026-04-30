@@ -7,7 +7,11 @@ import { obtenerUrlDescarga } from '../services/storage.service';
 const router = Router();
 
 const conexionRedis = process.env.REDIS_URL 
-  ? new IORedis(process.env.REDIS_URL, { maxRetriesPerRequest: null })
+  ? new IORedis(process.env.REDIS_URL, { 
+      maxRetriesPerRequest: null,
+      family: 0,
+      ...(process.env.REDIS_URL.startsWith('rediss://') ? { tls: { rejectUnauthorized: false } } : {})
+    })
   : new IORedis({
       host: process.env.REDIS_HOST || 'localhost',
       port: parseInt(process.env.REDIS_PORT || '6379'),

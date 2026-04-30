@@ -6,9 +6,10 @@ import fs from 'fs';
 const endpoint = process.env.R2_ENDPOINT?.replace(/\/$/, '');
 
 const clienteR2 = new S3Client({
-  region: 'us-east-1', // Requerido para compatibilidad de firmas en R2
+  region: 'auto', // Cloudflare R2 recomienda 'auto'
   endpoint: endpoint,
-  forcePathStyle: true,
+  forcePathStyle: false, // R2 generalmete no necesita forcePathStyle con SDK v3
+
   credentials: {
     accessKeyId: process.env.R2_ACCESS_KEY_ID || '',
     secretAccessKey: process.env.R2_SECRET_ACCESS_KEY || '',
