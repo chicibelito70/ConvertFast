@@ -14,7 +14,7 @@ export default function Home() {
           <div className="absolute bottom-[10%] right-[-10%] w-[40%] h-[40%] bg-primary/20 blur-[120px] rounded-full" />
         </div>
 
-        <motion_div
+        <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5 }}
@@ -32,14 +32,23 @@ export default function Home() {
             Convierte documentos, imágenes, audio y video de forma gratuita y segura. 
             Sin registros, sin límites complicados.
           </p>
-        </motion_div>
+        </motion.div>
       </section>
 
       {/* Converter Section */}
-      <section id="convert" className="w-full pb-20 px-4">
-        <AdSpace type="banner" className="max-w-4xl mx-auto mb-12" />
-        <Converter />
-        <AdSpace type="banner" className="max-w-4xl mx-auto mt-12" />
+      <section id="convert" className="w-full pb-20 px-4 container mx-auto">
+        <AdSpace type="banner" className="w-full mb-12" />
+        
+        <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-8">
+          <div className="flex flex-col gap-8">
+            <Converter />
+            <AdSpace type="native" className="w-full" />
+          </div>
+          
+          <aside className="hidden lg:block">
+            <AdSpace type="sidebar" className="sticky top-24" />
+          </aside>
+        </div>
       </section>
 
       {/* Features Section */}

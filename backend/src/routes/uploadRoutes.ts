@@ -1,46 +1,62 @@
 import { Router } from 'express';
 import multer from 'multer';
 import path from 'path';
-import { v4 as uuidv4 } from 'uuid';
 import fs from 'fs';
+import { v4 as uuidv4 } from 'uuid';
+import { subirArchivo } from '../services/storage.service';
 
 const router = Router();
 
-// Ensure upload directory exists
-const uploadDir = path.join(__dirname, '../../uploads');
-if (!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir, { recursive: true });
-}
-
-const storage = multer.diskStorage({
+// Configuración de almacenamiento temporal (Multer)
+const almacenamiento = multer.diskStorage({
   destination: (req, file, cb) => {
-    cb(null, uploadDir);
+    const rutaSubidas = path.join(__dirname, '../../uploads');
+    if (!fs.existsSync(rutaSubidas)) fs.mkdirSync(rutaSubidas, { recursive: true });
+    cb(null, rutaSubidas);
   },
   filename: (req, file, cb) => {
-    const uniqueName = `${uuidv4()}${path.extname(file.originalname)}`;
-    cb(null, uniqueName);
+    const idUnico = uuidv4();
+    const extension = path.extname(file.originalname);
+    cb(null, `${idUnico}${extension}`);
   },
 });
 
-const upload = multer({
-  storage,
-  limits: { fileSize: 100 * 1024 * 1024 }, // 100MB limit
+const subida = multer({ 
+    storage: almacenamiento,
+    limits: { fileSize: 100 * 1024 * 1024 } // Límite de 100MB
 });
 
-router.post('/', upload.single('file'), (req, res) => {
-  if (!req.file) {
-    return res.status(400).json({ error: 'No file uploaded' });
-  }
+// Ruta para subir archivos
+router.post('/', subida.single('file'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No se subió ningún archivo' });
+    }
 
-  res.status(200).json({
-    message: 'File uploaded successfully',
-    file: {
-      id: req.file.filename,
-      originalName: req.file.originalname,
-      mimeType: req.file.mimetype,
-      size: req.file.size,
-    },
-  });
+    const archivo = req.file;
+    const rutaLocal = archivo.path;
+    const nombreArchivo = archivo.filename;
+
+    // Subir a Cloudflare R2
+    await subirArchivo(rutaLocal, nombreArchivo);
+
+    // Eliminar archivo local después de subirlo a la nube
+    if (fs.existsSync(rutaLocal)) {
+      fs.unlinkSync(rutaLocal);
+    }
+
+    res.json({
+      mensaje: 'Archivo subido con éxito a la nube',
+      file: {
+        id: nombreArchivo,
+        name: archivo.originalname,
+        size: archivo.size,
+      },
+    });
+  } catch (error) {
+    console.error('Error en la subida:', error);
+    res.status(500).json({ error: 'Error al procesar el archivo en la nube' });
+  }
 });
 
 export default router;
