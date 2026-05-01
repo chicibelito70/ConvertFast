@@ -35,7 +35,7 @@ jobs:
       run: docker build -t convertfast-backend:latest .
 
     - name: Production Deployment Simulation
-      if: github.ref == 'refs/heads/main'
+      if: github.ref == 'refs/heads/master'
       run: |
-        echo "This step would deploy to production (Railway/Render/AWS) because we are on main branch."
+        echo "This step would deploy to production (Railway/Render/AWS) because we are on master branch."
         # Add your deployment commands here when ready
