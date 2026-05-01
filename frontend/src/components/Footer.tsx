@@ -40,7 +40,10 @@ export default function Footer() {
         <div className="border-t border-border/40 pt-8 flex flex-col md:flex-row justify-between items-center gap-4 text-xs text-muted-foreground">
           <p>© {new Date().getFullYear()} ConvertFast. Todos los derechos reservados.</p>
           <p className="flex items-center gap-1">
-            Hecho con <Heart className="h-3 w-3 text-destructive fill-current" /> para el mundo.
+            Hecho con <Heart className="h-3 w-3 text-destructive fill-current" /> para el mundo por{" "}
+            <a href="https://carlosvillavizar.netlify.app/" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline font-medium">
+              Carlos Villavizar
+            </a>
           </p>
         </div>
       </div>
