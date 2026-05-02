@@ -225,7 +225,7 @@ export default function Convertidor() {
       const tamanoTotal = Number(respuesta.headers.get("content-length")) || 0
       const lector = respuesta.body.getReader()
 
-      const fragmentos: Uint8Array[] = []
+      const fragmentos: BlobPart[] = []
       let bytesRecibidos = 0
 
       while (true) {
