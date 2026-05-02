@@ -38,4 +38,4 @@ RUN mkdir -p uploads outputs
 EXPOSE 4000
 
 # Start the application
-CMD ["npm", "start"]
+CMD ["node", "dist/index.js"]

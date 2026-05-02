@@ -144,3 +144,14 @@ procesador.on('completed', (tarea) => console.log(`Tarea ${tarea.id} completada`
 procesador.on('failed', (tarea, err) => console.error(`Tarea ${tarea?.id} falló: ${err.message}`));
 
 console.log('Worker listo con soporte inteligente de formatos...');
+
+// Manejo de apagado seguro (Graceful Shutdown)
+const apagarSuavemente = async (senal: string) => {
+  console.log(`${senal} recibido, cerrando worker de manera segura...`);
+  await procesador.close();
+  console.log('Worker cerrado. Saliendo del proceso.');
+  process.exit(0);
+};
+
+process.on('SIGTERM', () => apagarSuavemente('SIGTERM'));
+process.on('SIGINT', () => apagarSuavemente('SIGINT'));

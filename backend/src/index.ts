@@ -27,6 +27,16 @@ app.get('/salud', (req, res) => {
   res.status(200).json({ estado: 'ok', mensaje: 'La API de ConvertFast está funcionando' });
 });
 
-app.listen(PUERTO, () => {
+const servidor = app.listen(PUERTO, () => {
   console.log(`El servidor está corriendo en el puerto ${PUERTO}`);
 });
+
+const apagarServidor = (senal: string) => {
+  console.log(`${senal} recibido, deteniendo servidor Express...`);
+  servidor.close(() => {
+    console.log('Servidor HTTP detenido.');
+  });
+};
+
+process.on('SIGTERM', () => apagarServidor('SIGTERM'));
+process.on('SIGINT', () => apagarServidor('SIGINT'));
