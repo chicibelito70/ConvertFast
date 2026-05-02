@@ -13,6 +13,38 @@ function cn(...inputs: ClassValue[]) {
 }
 
 const BASE_API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000/api"
+const STORAGE_KEY = "convertfast_session"
+
+interface SesionGuardada {
+  idTarea: string
+  estado: Estado
+  formatoDestino: string
+  nombreArchivo: string
+  urlDescarga?: string
+  timestamp: number
+}
+
+const guardarSesion = (datos: SesionGuardada) => {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(datos)) } catch {}
+}
+
+const cargarSesion = (): SesionGuardada | null => {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY)
+    if (!raw) return null
+    const datos: SesionGuardada = JSON.parse(raw)
+    // Expirar sesiones de más de 30 minutos
+    if (Date.now() - datos.timestamp > 30 * 60 * 1000) {
+      localStorage.removeItem(STORAGE_KEY)
+      return null
+    }
+    return datos
+  } catch { return null }
+}
+
+const limpiarSesion = () => {
+  try { localStorage.removeItem(STORAGE_KEY) } catch {}
+}
 
 const CONVERSIONES_SOPORTADAS: Record<string, string[]> = {
   // Documentos (Según imagen + EPUB)
@@ -49,6 +81,24 @@ export default function Convertidor() {
   const [error, setError] = useState<string | null>(null)
   const [idTarea, setIdTarea] = useState<string | null>(null)
   const [urlDescarga, setUrlDescarga] = useState<string | null>(null)
+  const [nombreRecuperado, setNombreRecuperado] = useState<string | null>(null)
+
+  // Restaurar sesión guardada al montar (cuando el usuario desbloquea el móvil)
+  useEffect(() => {
+    const sesion = cargarSesion()
+    if (!sesion) return
+
+    setFormatoDestino(sesion.formatoDestino)
+    setNombreRecuperado(sesion.nombreArchivo)
+    setIdTarea(sesion.idTarea)
+
+    if (sesion.estado === "LISTO" && sesion.urlDescarga) {
+      setUrlDescarga(sesion.urlDescarga)
+      setEstado("LISTO")
+    } else if (sesion.estado === "CONVIRTIENDO") {
+      setEstado("CONVIRTIENDO")
+    }
+  }, [])
 
   const alSoltar = useCallback((archivosAceptados: File[]) => {
     if (archivosAceptados.length > 0) {
@@ -77,35 +127,69 @@ export default function Convertidor() {
       setProgreso(0)
       const resConvertir = await axios.post(`${BASE_API}/convert`, { fileId: resSubida.data.file.id, targetFormat: formatoDestino })
       setIdTarea(resConvertir.data.jobId)
+
+      // Guardar sesión para recuperar si el móvil se bloquea
+      guardarSesion({
+        idTarea: resConvertir.data.jobId,
+        estado: "CONVIRTIENDO",
+        formatoDestino,
+        nombreArchivo: archivo.name,
+        timestamp: Date.now(),
+      })
     } catch (err: any) {
       setError("Error en el servidor. Inténtalo de nuevo.")
       setEstado("ERROR")
     }
   }
 
+  // Polling de estado con soporte para reanudar tras bloqueo de pantalla
   useEffect(() => {
     let intervalo: NodeJS.Timeout
-    if (estado === "CONVIRTIENDO" && idTarea) {
-      intervalo = setInterval(async () => {
-        try {
-          const res = await axios.get(`${BASE_API}/convert/status/${idTarea}`)
-          if (res.data.status === "completed") {
-            setUrlDescarga(res.data.downloadUrl)
-            setEstado("LISTO")
-            clearInterval(intervalo)
-          } else if (res.data.status === "failed") {
-            setError(res.data.error || "Fallo en la conversión")
-            setEstado("ERROR")
-            clearInterval(intervalo)
-          } else {
-            setProgreso(res.data.progress || 0)
+
+    const consultarEstado = async () => {
+      if (!idTarea) return
+      try {
+        const res = await axios.get(`${BASE_API}/convert/status/${idTarea}`)
+        if (res.data.status === "completed") {
+          setUrlDescarga(res.data.downloadUrl)
+          setEstado("LISTO")
+          // Actualizar sesión con la URL de descarga
+          const sesion = cargarSesion()
+          if (sesion) {
+            guardarSesion({ ...sesion, estado: "LISTO", urlDescarga: res.data.downloadUrl })
           }
-        } catch (err) {
           clearInterval(intervalo)
+        } else if (res.data.status === "failed") {
+          setError(res.data.error || "Fallo en la conversión")
+          setEstado("ERROR")
+          limpiarSesion()
+          clearInterval(intervalo)
+        } else {
+          setProgreso(res.data.progress || 0)
         }
-      }, 2000)
+      } catch (err) {
+        // No limpiar el intervalo en errores de red temporales (móvil reconectando)
+      }
     }
-    return () => clearInterval(intervalo)
+
+    if (estado === "CONVIRTIENDO" && idTarea) {
+      // Consultar inmediatamente (por si ya terminó mientras el móvil estaba bloqueado)
+      consultarEstado()
+      intervalo = setInterval(consultarEstado, 2000)
+    }
+
+    // Reanudar polling cuando el usuario vuelve a la app
+    const alVolverVisible = () => {
+      if (document.visibilityState === "visible" && estado === "CONVIRTIENDO" && idTarea) {
+        consultarEstado()
+      }
+    }
+    document.addEventListener("visibilitychange", alVolverVisible)
+
+    return () => {
+      clearInterval(intervalo)
+      document.removeEventListener("visibilitychange", alVolverVisible)
+    }
   }, [estado, idTarea])
 
   const descargarArchivo = async () => {
@@ -114,7 +198,7 @@ export default function Convertidor() {
       setEstado("DESCARGANDO")
       setProgresoDescarga(0)
 
-      const nombreBase = archivo?.name.split(".").slice(0, -1).join(".") || "archivo"
+      const nombreBase = nombreMostrar.split(".").slice(0, -1).join(".") || "archivo"
       const nombreFinal = `${nombreBase}.${formatoDestino}`
 
       const respuesta = await fetch(urlDescarga)
@@ -194,7 +278,12 @@ export default function Convertidor() {
     setIdTarea(null)
     setUrlDescarga(null)
     setError(null)
+    setNombreRecuperado(null)
+    limpiarSesion()
   }
+
+  // Nombre para mostrar: del archivo real o de la sesión recuperada
+  const nombreMostrar = archivo?.name || nombreRecuperado || "Archivo"
 
   return (
     <div className="w-full max-w-3xl mx-auto p-3 sm:p-6">
@@ -219,12 +308,12 @@ export default function Convertidor() {
               </motion.div>
             )}
 
-            {(estado === "INACTIVO" || estado === "SUBIENDO" || estado === "CONVIRTIENDO") && archivo && (
+            {(estado === "INACTIVO" || estado === "SUBIENDO" || estado === "CONVIRTIENDO") && (archivo || nombreRecuperado) && (
               <motion.div key="proc" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
                 <div className="flex items-center gap-4 p-4 bg-muted/50 rounded-xl">
                   <File className="h-6 w-6 text-primary" />
-                  <p className="flex-grow font-medium truncate">{archivo.name}</p>
-                  {estado === "INACTIVO" && <button onClick={() => setArchivo(null)}><XCircle className="h-5 w-5" /></button>}
+                  <p className="flex-grow font-medium truncate">{nombreMostrar}</p>
+                  {estado === "INACTIVO" && <button onClick={() => { setArchivo(null); setNombreRecuperado(null) }}><XCircle className="h-5 w-5" /></button>}
                 </div>
                 {estado === "INACTIVO" && (
                   <div className="flex flex-wrap gap-3 sm:gap-4 justify-center">
