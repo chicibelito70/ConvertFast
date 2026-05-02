@@ -38,13 +38,14 @@ const CONVERSIONES_SOPORTADAS: Record<string, string[]> = {
   webm: ["mp4"],
 }
 
-type Estado = "INACTIVO" | "SUBIENDO" | "CONVIRTIENDO" | "LISTO" | "ERROR"
+type Estado = "INACTIVO" | "SUBIENDO" | "CONVIRTIENDO" | "LISTO" | "DESCARGANDO" | "ERROR"
 
 export default function Convertidor() {
   const [archivo, setArchivo] = useState<File | null>(null)
   const [formatoDestino, setFormatoDestino] = useState<string>("")
   const [estado, setEstado] = useState<Estado>("INACTIVO")
   const [progreso, setProgreso] = useState(0)
+  const [progresoDescarga, setProgresoDescarga] = useState(0)
   const [error, setError] = useState<string | null>(null)
   const [idTarea, setIdTarea] = useState<string | null>(null)
   const [urlDescarga, setUrlDescarga] = useState<string | null>(null)
@@ -107,27 +108,105 @@ export default function Convertidor() {
     return () => clearInterval(intervalo)
   }, [estado, idTarea])
 
+  const descargarArchivo = async () => {
+    if (!urlDescarga) return
+    try {
+      setEstado("DESCARGANDO")
+      setProgresoDescarga(0)
+
+      const nombreBase = archivo?.name.split(".").slice(0, -1).join(".") || "archivo"
+      const nombreFinal = `${nombreBase}.${formatoDestino}`
+
+      const respuesta = await fetch(urlDescarga)
+      if (!respuesta.ok) throw new Error("Error al descargar el archivo")
+
+      // Fallback para iOS Safari u otros navegadores sin soporte de ReadableStream
+      if (!respuesta.body?.getReader) {
+        const blob = await respuesta.blob()
+        const urlBlob = window.URL.createObjectURL(blob)
+        const enlace = document.createElement("a")
+        enlace.href = urlBlob
+        enlace.download = nombreFinal
+        enlace.style.display = "none"
+        document.body.appendChild(enlace)
+        enlace.click()
+        setTimeout(() => {
+          document.body.removeChild(enlace)
+          window.URL.revokeObjectURL(urlBlob)
+        }, 100)
+        setEstado("LISTO")
+        return
+      }
+
+      const tamanoTotal = Number(respuesta.headers.get("content-length")) || 0
+      const lector = respuesta.body.getReader()
+
+      const fragmentos: Uint8Array[] = []
+      let bytesRecibidos = 0
+
+      while (true) {
+        const { done, value } = await lector.read()
+        if (done) break
+        fragmentos.push(value)
+        bytesRecibidos += value.length
+        if (tamanoTotal > 0) {
+          setProgresoDescarga(Math.round((bytesRecibidos / tamanoTotal) * 100))
+        } else {
+          // Sin content-length: progreso indeterminado (avanza suavemente hasta 90%)
+          setProgresoDescarga(Math.min(90, Math.round(bytesRecibidos / 1024)))
+        }
+      }
+
+      setProgresoDescarga(100)
+
+      const blob = new Blob(fragmentos)
+      const urlBlob = window.URL.createObjectURL(blob)
+      const enlace = document.createElement("a")
+      enlace.href = urlBlob
+      enlace.download = nombreFinal
+      enlace.style.display = "none"
+      document.body.appendChild(enlace)
+      enlace.click()
+      setTimeout(() => {
+        document.body.removeChild(enlace)
+        window.URL.revokeObjectURL(urlBlob)
+      }, 100)
+
+      setEstado("LISTO")
+    } catch (err: any) {
+      // Fallback final: abrir URL directamente (funciona en cualquier navegador/móvil)
+      if (urlDescarga) {
+        window.open(urlDescarga, "_blank")
+        setEstado("LISTO")
+      } else {
+        setError("Error al descargar el archivo. Inténtalo de nuevo.")
+        setEstado("ERROR")
+      }
+    }
+  }
+
   const reiniciar = () => {
     setArchivo(null)
     setFormatoDestino("")
     setEstado("INACTIVO")
     setProgreso(0)
+    setProgresoDescarga(0)
     setIdTarea(null)
     setUrlDescarga(null)
     setError(null)
   }
 
   return (
-    <div className="w-full max-w-3xl mx-auto p-6">
-      <div className="bg-card border border-border/50 rounded-3xl shadow-xl overflow-hidden">
-        <div className="p-8">
+    <div className="w-full max-w-3xl mx-auto p-3 sm:p-6">
+      <div className="bg-card border border-border/50 rounded-2xl sm:rounded-3xl shadow-xl overflow-hidden">
+        <div className="p-4 sm:p-8">
           <AnimatePresence mode="wait">
             {estado === "INACTIVO" && !archivo && (
               <motion.div key="drop" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
                 <div 
                   {...getRootProps()} 
                   className={cn(
-                    "border-2 border-dashed rounded-2xl p-12 text-center cursor-pointer", 
+                    "border-2 border-dashed rounded-2xl p-6 sm:p-12 text-center cursor-pointer", 
                     isDragActive ? "border-primary bg-primary/5" : "border-muted-foreground/20"
                   )}
                 >
@@ -148,7 +227,7 @@ export default function Convertidor() {
                   {estado === "INACTIVO" && <button onClick={() => setArchivo(null)}><XCircle className="h-5 w-5" /></button>}
                 </div>
                 {estado === "INACTIVO" && (
-                  <div className="flex gap-4 justify-center">
+                  <div className="flex flex-wrap gap-3 sm:gap-4 justify-center">
                     <select value={formatoDestino} onChange={(e) => setFormatoDestino(e.target.value)} className="bg-background border p-2 rounded-lg">
                       {CONVERSIONES_SOPORTADAS[archivo.name.split(".").pop()?.toLowerCase() || ""]?.map(f => <option key={f} value={f}>{f.toUpperCase()}</option>)}
                     </select>
@@ -164,15 +243,32 @@ export default function Convertidor() {
               </motion.div>
             )}
 
-            {estado === "LISTO" && (
-              <div className="text-center space-y-6">
-                <CheckCircle className="h-12 w-12 text-green-500 mx-auto" />
-                <h3 className="text-2xl font-bold">¡Listo!</h3>
-                <div className="flex gap-4 justify-center">
-                  <a href={urlDescarga!} download className="bg-primary text-white px-8 py-3 rounded-xl font-bold">Descargar</a>
-                  <button onClick={reiniciar} className="bg-secondary px-8 py-3 rounded-xl font-bold">Otro</button>
-                </div>
-              </div>
+            {(estado === "LISTO" || estado === "DESCARGANDO") && (
+              <motion.div key="listo" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-center space-y-6">
+                {estado === "DESCARGANDO" ? (
+                  <>
+                    <Download className="h-12 w-12 text-primary mx-auto animate-bounce" />
+                    <h3 className="text-2xl font-bold">Descargando...</h3>
+                    <div className="space-y-2 max-w-md mx-auto">
+                      <p className="text-sm font-medium">{progresoDescarga}%</p>
+                      <div className="h-2 bg-secondary rounded-full overflow-hidden">
+                        <motion.div className="h-full bg-primary" animate={{ width: `${progresoDescarga}%` }} />
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle className="h-12 w-12 text-green-500 mx-auto" />
+                    <h3 className="text-2xl font-bold">¡Listo!</h3>
+                    <div className="flex flex-wrap gap-3 sm:gap-4 justify-center">
+                      <button onClick={descargarArchivo} className="bg-primary text-white px-8 py-3 rounded-xl font-bold flex items-center gap-2">
+                        <Download className="h-5 w-5" /> Descargar
+                      </button>
+                      <button onClick={reiniciar} className="bg-secondary px-8 py-3 rounded-xl font-bold">Otro</button>
+                    </div>
+                  </>
+                )}
+              </motion.div>
             )}
 
             {estado === "ERROR" && (

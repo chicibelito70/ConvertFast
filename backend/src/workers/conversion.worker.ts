@@ -38,10 +38,12 @@ const procesador = new Worker('conversion-queue', async (tarea: Job) => {
   const rutaSalida = path.join(carpetaSalidas, nombreArchivoSalida);
 
   console.log(`Iniciando conversión: ${fileId} -> ${targetFormat}`);
+  await tarea.updateProgress(10);
 
   try {
     console.log(`Descargando ${fileId} desde R2...`);
     await descargarDesdeR2(fileId, rutaEntrada);
+    await tarea.updateProgress(30);
 
     const extension = path.extname(fileId).toLowerCase().replace('.', '');
     
@@ -54,6 +56,9 @@ const procesador = new Worker('conversion-queue', async (tarea: Job) => {
       await new Promise((resolve, reject) => {
         ffmpeg(rutaEntrada)
           .toFormat(targetFormat)
+          .on('progress', (prog: any) => {
+            if (prog.percent) tarea.updateProgress(Math.round(30 + prog.percent * 0.5));
+          })
           .on('end', () => resolve(nombreArchivoSalida))
           .on('error', (err) => reject(err))
           .save(rutaSalida);
@@ -126,8 +131,10 @@ const procesador = new Worker('conversion-queue', async (tarea: Job) => {
         throw new Error(`Conversión no soportada: ${extension} a ${targetFormat}`);
     }
 
+    await tarea.updateProgress(80);
     console.log(`Subiendo resultado ${nombreArchivoSalida} a R2...`);
     await subirArchivo(rutaSalida, nombreArchivoSalida);
+    await tarea.updateProgress(100);
 
     return nombreArchivoSalida;
 
