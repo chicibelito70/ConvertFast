@@ -6,8 +6,14 @@ import { obtenerUrlDescarga } from '../services/storage.service';
 
 const router = Router();
 
-const conexionRedis = process.env.REDIS_URL 
-  ? new IORedis(process.env.REDIS_URL, { maxRetriesPerRequest: null })
+const redisUrl = process.env.REDIS_URL?.replace(/^["']|["']$/g, '');
+
+const conexionRedis = redisUrl 
+  ? new IORedis(redisUrl, { 
+      maxRetriesPerRequest: null,
+      family: 0,
+      ...(redisUrl.startsWith('rediss://') ? { tls: { rejectUnauthorized: false } } : {})
+    })
   : new IORedis({
       host: process.env.REDIS_HOST || 'localhost',
       port: parseInt(process.env.REDIS_PORT || '6379'),
@@ -22,6 +28,15 @@ router.post('/', async (req, res) => {
 
   if (!fileId || !targetFormat) {
     return res.status(400).json({ error: 'Faltan datos requeridos (fileId, targetFormat)' });
+  }
+
+  // AUDITORÍA DE SEGURIDAD: Validar estrictamente los parámetros para evitar inyección de comandos o path traversal
+  if (!/^[a-f0-9\-]+\.[a-z0-9]+$/i.test(fileId)) {
+    return res.status(400).json({ error: 'El fileId proporcionado es inválido o peligroso.' });
+  }
+
+  if (!/^[a-z0-9]+$/i.test(targetFormat)) {
+    return res.status(400).json({ error: 'El formato destino es inválido o peligroso.' });
   }
 
   const idTarea = uuidv4();

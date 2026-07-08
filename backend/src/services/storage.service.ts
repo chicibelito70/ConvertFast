@@ -6,9 +6,10 @@ import fs from 'fs';
 const endpoint = process.env.R2_ENDPOINT?.replace(/\/$/, '');
 
 const clienteR2 = new S3Client({
-  region: 'us-east-1', // Requerido para compatibilidad de firmas en R2
+  region: 'auto', 
   endpoint: endpoint,
-  forcePathStyle: true,
+  forcePathStyle: true, // ¡CRÍTICO para Cloudflare R2!
+
   credentials: {
     accessKeyId: process.env.R2_ACCESS_KEY_ID || '',
     secretAccessKey: process.env.R2_SECRET_ACCESS_KEY || '',
@@ -40,6 +41,7 @@ export const obtenerUrlDescarga = async (nombreArchivo: string): Promise<string>
   const comando = new GetObjectCommand({
     Bucket: NOMBRE_BUCKET,
     Key: nombreArchivo,
+    ResponseContentDisposition: `attachment; filename="${nombreArchivo}"`
   });
 
   // URL válida por 1 hora (3600 segundos)
