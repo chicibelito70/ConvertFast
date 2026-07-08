@@ -117,7 +117,8 @@ export default function Convertidor() {
     setError(null)
   }
 
-  const archivoExtension = archivo?.name.split(".").pop()?.toLowerCase() || ""
+  const archivoNombre = archivo?.name || ""
+  const archivoExtension = archivoNombre.split(".").pop()?.toLowerCase() || ""
   const opcionesConversion = CONVERSIONES_SOPORTADAS[archivoExtension] || []
 
   return (
@@ -147,7 +148,7 @@ export default function Convertidor() {
               <motion.div key="proc" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
                 <div className="flex items-center gap-4 p-4 bg-muted/50 rounded-xl">
                   <File className="h-6 w-6 text-primary" />
-                  <p className="flex-grow font-medium truncate">{archivo.name}</p>
+                  <p className="flex-grow font-medium truncate">{archivoNombre}</p>
                   {estado === "INACTIVO" && <button onClick={() => setArchivo(null)}><XCircle className="h-5 w-5" /></button>}
                 </div>
                 {estado === "INACTIVO" && (
