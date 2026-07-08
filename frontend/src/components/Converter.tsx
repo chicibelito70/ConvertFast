@@ -117,6 +117,9 @@ export default function Convertidor() {
     setError(null)
   }
 
+  const archivoExtension = archivo?.name.split(".").pop()?.toLowerCase() || ""
+  const opcionesConversion = CONVERSIONES_SOPORTADAS[archivoExtension] || []
+
   return (
     <div className="w-full max-w-3xl mx-auto p-6">
       <div className="bg-card border border-border/50 rounded-3xl shadow-xl overflow-hidden">
@@ -150,9 +153,9 @@ export default function Convertidor() {
                 {estado === "INACTIVO" && (
                   <div className="flex gap-4 justify-center">
                     <select value={formatoDestino} onChange={(e) => setFormatoDestino(e.target.value)} className="bg-background border p-2 rounded-lg">
-                      {CONVERSIONES_SOPORTADAS[archivo.name.split(".").pop()?.toLowerCase() || ""]?.map(f => <option key={f} value={f}>{f.toUpperCase()}</option>)}
+                      {opcionesConversion.map(f => <option key={f} value={f}>{f.toUpperCase()}</option>)}
                     </select>
-                    <button onClick={iniciarConversion} className="bg-primary text-white px-6 py-2 rounded-xl font-bold">Convertir</button>
+                    <button onClick={iniciarConversion} className="bg-primary text-white px-6 py-2 rounded-xl font-bold" disabled={!opcionesConversion.length}>Convertir</button>
                   </div>
                 )}
                 {(estado === "SUBIENDO" || estado === "CONVIRTIENDO") && (
