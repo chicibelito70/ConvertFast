@@ -282,8 +282,13 @@ export default function Convertidor() {
     limpiarSesion()
   }
 
+
+  const archivoExtension = archivo?.name.split(".").pop()?.toLowerCase() || ""
+  const opcionesConversion = CONVERSIONES_SOPORTADAS[archivoExtension] || []
+
   // Nombre para mostrar: del archivo real o de la sesión recuperada
   const nombreMostrar = archivo?.name || nombreRecuperado || "Archivo"
+
 
   return (
     <div className="w-full max-w-3xl mx-auto p-3 sm:p-6">
@@ -318,9 +323,9 @@ export default function Convertidor() {
                 {estado === "INACTIVO" && (
                   <div className="flex flex-wrap gap-3 sm:gap-4 justify-center">
                     <select value={formatoDestino} onChange={(e) => setFormatoDestino(e.target.value)} className="bg-background border p-2 rounded-lg">
-                      {CONVERSIONES_SOPORTADAS[archivo.name.split(".").pop()?.toLowerCase() || ""]?.map(f => <option key={f} value={f}>{f.toUpperCase()}</option>)}
+                      {opcionesConversion.map(f => <option key={f} value={f}>{f.toUpperCase()}</option>)}
                     </select>
-                    <button onClick={iniciarConversion} className="bg-primary text-white px-6 py-2 rounded-xl font-bold">Convertir</button>
+                    <button onClick={iniciarConversion} className="bg-primary text-white px-6 py-2 rounded-xl font-bold" disabled={!opcionesConversion.length}>Convertir</button>
                   </div>
                 )}
                 {(estado === "SUBIENDO" || estado === "CONVIRTIENDO") && (
