@@ -62,10 +62,35 @@ export const descargarDesdeR2 = async (nombreArchivo: string, rutaDestino: strin
     const respuesta = await clienteR2.send(comando);
     const cuerpo = respuesta.Body as any;
 
-    return new Promise((resolve, reject) => {
+    if (!cuerpo) {
+      throw new Error(`No se recibió cuerpo desde R2 para ${nombreArchivo}`);
+    }
+
+    if (typeof cuerpo.pipe === 'function') {
+      await new Promise<void>((resolve, reject) => {
         const escritor = fs.createWriteStream(rutaDestino);
         cuerpo.pipe(escritor);
         escritor.on('finish', resolve);
         escritor.on('error', reject);
-    });
+        cuerpo.on('error', reject);
+      });
+      return;
+    }
+
+    if (Buffer.isBuffer(cuerpo)) {
+      fs.writeFileSync(rutaDestino, cuerpo);
+      return;
+    }
+
+    if (typeof cuerpo === 'string') {
+      fs.writeFileSync(rutaDestino, cuerpo, 'utf-8');
+      return;
+    }
+
+    // Caso genérico para AsyncIterable de chunks
+    const chunks: Buffer[] = [];
+    for await (const chunk of cuerpo as AsyncIterable<Uint8Array>) {
+      chunks.push(Buffer.from(chunk));
+    }
+    fs.writeFileSync(rutaDestino, Buffer.concat(chunks));
 };
