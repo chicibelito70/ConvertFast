@@ -10,8 +10,14 @@ import { descargarDesdeR2, subirArchivo } from '../services/storage.service';
 
 const ejecutarComando = promisify(exec);
 
-const conexionRedis = process.env.REDIS_URL 
-  ? new IORedis(process.env.REDIS_URL, { maxRetriesPerRequest: null })
+const redisUrl = process.env.REDIS_URL?.replace(/^["']|["']$/g, '');
+
+const conexionRedis = redisUrl 
+  ? new IORedis(redisUrl, { 
+      maxRetriesPerRequest: null,
+      family: 0,
+      ...(redisUrl.startsWith('rediss://') ? { tls: { rejectUnauthorized: false } } : {})
+    })
   : new IORedis({
       host: process.env.REDIS_HOST || 'localhost',
       port: parseInt(process.env.REDIS_PORT || '6379'),
@@ -32,10 +38,12 @@ const procesador = new Worker('conversion-queue', async (tarea: Job) => {
   const rutaSalida = path.join(carpetaSalidas, nombreArchivoSalida);
 
   console.log(`Iniciando conversión: ${fileId} -> ${targetFormat}`);
+  await tarea.updateProgress(10);
 
   try {
     console.log(`Descargando ${fileId} desde R2...`);
     await descargarDesdeR2(fileId, rutaEntrada);
+    await tarea.updateProgress(30);
 
     const extension = path.extname(fileId).toLowerCase().replace('.', '');
     
@@ -48,6 +56,9 @@ const procesador = new Worker('conversion-queue', async (tarea: Job) => {
       await new Promise((resolve, reject) => {
         ffmpeg(rutaEntrada)
           .toFormat(targetFormat)
+          .on('progress', (prog: any) => {
+            if (prog.percent) tarea.updateProgress(Math.round(30 + prog.percent * 0.5));
+          })
           .on('end', () => resolve(nombreArchivoSalida))
           .on('error', (err) => reject(err))
           .save(rutaSalida);
@@ -84,9 +95,14 @@ const procesador = new Worker('conversion-queue', async (tarea: Job) => {
        let comandoLibreOffice = 'libreoffice';
        try { await ejecutarComando('libreoffice --version'); } catch (e) { comandoLibreOffice = 'soffice'; }
 
-       const comando = `${comandoLibreOffice} --headless --convert-to ${targetFormat} "${rutaEntrada}" --outdir "${carpetaSalidas}"`;
+       // AUDITORÍA: LibreOffice falla al ejecutarse como root en Docker. 
+       // Solución: Aislar el perfil de usuario por cada tarea usando -env:UserInstallation
+       const perfilTemp = `file:///tmp/LibreOffice_${jobId}`;
+       const comando = `${comandoLibreOffice} -env:UserInstallation=${perfilTemp} --headless --convert-to ${targetFormat} "${rutaEntrada}" --outdir "${carpetaSalidas}"`;
+       
        console.log(`Ejecutando LibreOffice: ${comando}`);
-       await ejecutarComando(comando);
+       // Tiempo límite de 5 minutos (300000 ms) para evitar que se quede colgado
+       await ejecutarComando(comando, { timeout: 300000 });
        
        const baseOriginal = path.basename(fileId, path.extname(fileId));
        const salidaLibreOffice = path.join(carpetaSalidas, `${baseOriginal}.${targetFormat}`);
@@ -94,8 +110,11 @@ const procesador = new Worker('conversion-queue', async (tarea: Job) => {
        if (fs.existsSync(salidaLibreOffice)) {
          fs.renameSync(salidaLibreOffice, rutaSalida);
        } else {
-         throw new Error('La conversión de documentos falló');
+         throw new Error('La conversión de documentos falló (LibreOffice no generó salida)');
        }
+       
+       // Limpiar el perfil temporal
+       try { await ejecutarComando(`rm -rf /tmp/LibreOffice_${jobId}`); } catch(e) {}
     }
     // 5. ARCHIVOS COMPRIMIDOS
     else if (['zip', '7z'].includes(targetFormat)) {
@@ -112,8 +131,10 @@ const procesador = new Worker('conversion-queue', async (tarea: Job) => {
         throw new Error(`Conversión no soportada: ${extension} a ${targetFormat}`);
     }
 
+    await tarea.updateProgress(80);
     console.log(`Subiendo resultado ${nombreArchivoSalida} a R2...`);
     await subirArchivo(rutaSalida, nombreArchivoSalida);
+    await tarea.updateProgress(100);
 
     return nombreArchivoSalida;
 
@@ -130,3 +151,14 @@ procesador.on('completed', (tarea) => console.log(`Tarea ${tarea.id} completada`
 procesador.on('failed', (tarea, err) => console.error(`Tarea ${tarea?.id} falló: ${err.message}`));
 
 console.log('Worker listo con soporte inteligente de formatos...');
+
+// Manejo de apagado seguro (Graceful Shutdown)
+const apagarSuavemente = async (senal: string) => {
+  console.log(`${senal} recibido, cerrando worker de manera segura...`);
+  await procesador.close();
+  console.log('Worker cerrado. Saliendo del proceso.');
+  process.exit(0);
+};
+
+process.on('SIGTERM', () => apagarSuavemente('SIGTERM'));
+process.on('SIGINT', () => apagarSuavemente('SIGINT'));
