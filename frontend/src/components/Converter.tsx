@@ -77,6 +77,7 @@ export default function Convertidor() {
   const [formatoDestino, setFormatoDestino] = useState<string>("")
   const [estado, setEstado] = useState<Estado>("INACTIVO")
   const [progreso, setProgreso] = useState(0)
+  const [progresoConversion, setProgresoConversion] = useState(0)
   const [progresoDescarga, setProgresoDescarga] = useState(0)
   const [error, setError] = useState<string | null>(null)
   const [idTarea, setIdTarea] = useState<string | null>(null)
@@ -118,13 +119,14 @@ export default function Convertidor() {
     try {
       setEstado("SUBIENDO")
       setProgreso(0)
+      setProgresoConversion(0)
       const datosForm = new FormData()
       datosForm.append("file", archivo)
       const resSubida = await axios.post(`${BASE_API}/upload`, datosForm, {
         onUploadProgress: (ev) => setProgreso(Math.round((ev.loaded * 100) / (ev.total || 1))),
       })
       setEstado("CONVIRTIENDO")
-      setProgreso(0)
+      setProgresoConversion(0)
       const resConvertir = await axios.post(`${BASE_API}/convert`, { fileId: resSubida.data.file.id, targetFormat: formatoDestino })
       setIdTarea(resConvertir.data.jobId)
 
@@ -165,7 +167,8 @@ export default function Convertidor() {
           limpiarSesion()
           clearInterval(intervalo)
         } else {
-          setProgreso(res.data.progress || 0)
+          const progresoRemoto = Number(res.data.progress)
+          setProgresoConversion(Number.isFinite(progresoRemoto) ? Math.min(100, Math.max(0, progresoRemoto)) : 0)
         }
       } catch (err) {
         // No limpiar el intervalo en errores de red temporales (móvil reconectando)
@@ -330,8 +333,12 @@ export default function Convertidor() {
                 )}
                 {(estado === "SUBIENDO" || estado === "CONVIRTIENDO") && (
                   <div className="space-y-2">
-                    <p className="text-sm font-medium">{estado === "SUBIENDO" ? "Subiendo..." : "Convirtiendo..."} {progreso}%</p>
-                    <div className="h-2 bg-secondary rounded-full overflow-hidden"><motion.div className="h-full bg-primary" animate={{ width: `${progreso}%` }} /></div>
+                    <p className="text-sm font-medium">
+                      {estado === "SUBIENDO" ? "Subiendo..." : "Convirtiendo..."} {estado === "SUBIENDO" ? progreso : progresoConversion}%
+                    </p>
+                    <div className="h-2 bg-secondary rounded-full overflow-hidden">
+                      <motion.div className="h-full bg-primary" animate={{ width: `${estado === "SUBIENDO" ? progreso : progresoConversion}%` }} />
+                    </div>
                   </div>
                 )}
               </motion.div>
