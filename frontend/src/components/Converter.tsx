@@ -282,12 +282,12 @@ export default function Convertidor() {
     limpiarSesion()
   }
 
-
-  const archivoExtension = archivo?.name.split(".").pop()?.toLowerCase() || ""
+  const nombreArchivoSeguro = archivo?.name || nombreRecuperado || ""
+  const archivoExtension = nombreArchivoSeguro.split(".").pop()?.toLowerCase() || ""
   const opcionesConversion = CONVERSIONES_SOPORTADAS[archivoExtension] || []
 
   // Nombre para mostrar: del archivo real o de la sesión recuperada
-  const nombreMostrar = archivo?.name || nombreRecuperado || "Archivo"
+  const nombreMostrar = nombreArchivoSeguro || "Archivo"
 
 
   return (
