@@ -50,6 +50,7 @@ const procesador = new Worker('conversion-queue', async (tarea: Job) => {
     // 1. IMÁGENES
     if (['jpg', 'jpeg', 'png', 'webp', 'svg'].includes(targetFormat) && ['jpg', 'jpeg', 'png', 'webp', 'svg'].includes(extension)) {
       await sharp(rutaEntrada).toFile(rutaSalida);
+      await tarea.updateProgress(60);
     }
     // 2. AUDIO/VIDEO
     else if (['mp3', 'wav', 'ogg', 'mp4', 'avi', 'mov', 'webm'].includes(targetFormat)) {
@@ -59,7 +60,10 @@ const procesador = new Worker('conversion-queue', async (tarea: Job) => {
           .on('progress', (prog: any) => {
             if (prog.percent) tarea.updateProgress(Math.round(30 + prog.percent * 0.5));
           })
-          .on('end', () => resolve(nombreArchivoSalida))
+          .on('end', () => {
+            tarea.updateProgress(60);
+            resolve(nombreArchivoSalida);
+          })
           .on('error', (err) => reject(err))
           .save(rutaSalida);
       });
@@ -67,28 +71,37 @@ const procesador = new Worker('conversion-queue', async (tarea: Job) => {
     // 3. CASOS ESPECIALES (PDF y DOCUMENTOS)
     else if (extension === 'pdf' && targetFormat === 'docx') {
        console.log('Usando pdf2docx...');
+       await tarea.updateProgress(40);
        await ejecutarComando(`python3 -c "from pdf2docx import Converter; cv = Converter('${rutaEntrada}'); cv.convert('${rutaSalida}'); cv.close()"`);
+       await tarea.updateProgress(70);
     }
     else if (extension === 'pdf' && targetFormat === 'txt') {
        console.log('Usando pdftotext...');
+       await tarea.updateProgress(40);
        await ejecutarComando(`pdftotext "${rutaEntrada}" "${rutaSalida}"`);
+       await tarea.updateProgress(70);
     }
     else if (extension === 'pdf' && targetFormat === 'epub') {
        console.log('Conversión compleja: PDF -> EPUB (vía DOCX temporal)...');
        const rutaTemporalDocx = path.join(carpetaSalidas, `${jobId}_temp.docx`);
        
+       await tarea.updateProgress(40);
        // Paso A: PDF a Word temporal
        await ejecutarComando(`python3 -c "from pdf2docx import Converter; cv = Converter('${rutaEntrada}'); cv.convert('${rutaTemporalDocx}'); cv.close()"`);
+       await tarea.updateProgress(55);
        
        // Paso B: Word temporal a EPUB
        await ejecutarComando(`pandoc "${rutaTemporalDocx}" -o "${rutaSalida}"`);
+       await tarea.updateProgress(70);
        
        // Limpieza del archivo temporal
        if (fs.existsSync(rutaTemporalDocx)) fs.unlinkSync(rutaTemporalDocx);
     }
     else if (targetFormat === 'epub') {
        console.log('Usando Pandoc para EPUB...');
+       await tarea.updateProgress(40);
        await ejecutarComando(`pandoc "${rutaEntrada}" -o "${rutaSalida}"`);
+       await tarea.updateProgress(70);
     }
     // 4. DOCUMENTOS GENERALES (LibreOffice)
     else if (['pdf', 'docx', 'txt', 'xlsx', 'csv', 'pptx'].includes(targetFormat)) {

@@ -78,9 +78,13 @@ router.get('/status/:jobId', async (req, res) => {
         });
     }
 
+    const progresoActual = Number(tarea.progress)
+    const progresoBase = Number.isFinite(progresoActual) ? progresoActual : 0
+    const progresoActivo = progresoBase === 0 && estado !== 'completed' && estado !== 'failed' ? 10 : progresoBase
+
     res.json({
       status: estado,
-      progress: tarea.progress,
+      progress: progresoActivo,
       error: tarea.failedReason,
     });
   } catch (error) {
